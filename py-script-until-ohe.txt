@@ -1,0 +1,138 @@
+import pandas as pd
+import csv
+import numpy as np
+
+data_loans_100k = pd.read_csv('C:/Users/www/Desktop/PMNDA/loans_100k.csv', sep=",",dtype=object,
+                         usecols=lambda col: col not in ["id","member_id"])
+
+#Rename some values on target variable
+data_loans_100k['loan_status'].replace('Does not meet the credit policy. Status:Charged Off', 'Charged Off',inplace=True)
+data_loans_100k['loan_status'].replace('Does not meet the credit policy. Status:Fully Paid', 'Fully Paid',inplace=True)
+
+#Subset target varible
+data_loans_sset = data_loans_100k[(data_loans_100k.loan_status == 'Fully Paid') | (data_loans_100k.loan_status == 'Charged Off') | (data_loans_100k.loan_status == 'Default') | ((data_loans_100k.loan_status == 'Current') & (data_loans_100k.out_prncp < '1'))]
+
+data_loans_sset['loan_status'].replace('Current', 'Fully Paid',inplace=True)
+data_loans_sset['loan_status'].replace('Default', 'Charged Off',inplace=True)
+
+#Selecting features before loan application. Also dropping addr_state, earliest_cr_line, zip_code
+data_loans = data_loans_sset[['acc_now_delinq','acc_open_past_24mths','all_util','annual_inc','annual_inc_joint',
+                  'application_type','avg_cur_bal','bc_open_to_buy','chargeoff_within_12_mths','delinq_2yrs',
+                  'delinq_amnt','dti','dti_joint','emp_length','grade','home_ownership','installment',
+                  'int_rate','loan_amnt','loan_status','mort_acc','mths_since_last_delinq','mths_since_last_major_derog',
+                  'mths_since_last_record','mths_since_rcnt_il',
+                  'mths_since_recent_bc','mths_since_recent_bc_dlq','mths_since_recent_inq','mths_since_recent_revol_delinq',
+                  'num_accts_ever_120_pd','num_actv_bc_tl','num_actv_rev_tl','num_bc_sats','num_bc_tl','num_il_tl','num_op_rev_tl',
+                  'num_rev_accts','num_rev_tl_bal_gt_0','num_sats','num_tl_120dpd_2m','num_tl_30dpd','num_tl_90g_dpd_24m',
+                  'num_tl_op_past_12m','open_acc','open_acc_6m','open_il_12m','open_il_24m','open_act_il','open_rv_12m','open_rv_24m',
+                  'pct_tl_nvr_dlq','percent_bc_gt_75','pub_rec','pub_rec_bankruptcies','purpose','sub_grade','tax_liens','term',
+                  'tot_cur_bal','tot_hi_cred_lim','total_acc','total_bal_ex_mort','total_bal_il','total_bc_limit',
+                  'total_cu_tl','total_il_high_credit_limit','total_rev_hi_lim','verification_status',
+                  'revol_bal_joint','sec_app_earliest_cr_line','sec_app_inq_last_6mths','sec_app_mort_acc','sec_app_open_acc',
+                  'sec_app_revol_util','sec_app_open_act_il','sec_app_num_rev_accts','sec_app_chargeoff_within_12_mths',
+                  'sec_app_collections_12_mths_ex_med','sec_app_mths_since_last_major_derog']]
+
+data_loans.annual_inc_joint = data_loans.annual_inc_joint.fillna(0)
+data_loans.dti_joint = data_loans.dti_joint.fillna(0)
+
+data_loans['annual_inc'] = np.where(data_loans.annual_inc_joint == 0 , data_loans.annual_inc, data_loans.annual_inc_joint)
+data_loans['dti'] = np.where(data_loans.dti_joint == 0 , data_loans.dti, data_loans.dti_joint)
+
+data_loans = data_loans.drop('annual_inc_joint', 1)
+data_loans = data_loans.drop('dti_joint', 1)
+
+#Add NA values on missing datapoint
+data_loans.fillna('NA')
+
+# Drop columns with variance 0
+data_loans.drop(data_loans.std()[(data_loans.std() == 0)].index, axis=1)
+
+# Select columns with more than 20% of missing values
+data_loans_cols = data_loans.columns[(data_loans.values == 'NA').sum(0) > 2]
+data_loans_rows = data_loans.apply(lambda x: x.count(), axis=1)
+#data_loans_rows = data_loans.rows[(data_loans.values == 'NA').sum(0) > 2]
+
+
+# Deleting columns with more than 0.4 of missing values
+thresh = len(data_loans) * .6
+data_loans.dropna(thresh = thresh, axis = 1, inplace = True)
+
+#Missing values patterns: Feature Analysis 
+#data_loans_missing = data_loans[is.na( data_loans.num_accts_ever_120_pd),]
+
+
+#data_loans_missing_subset = subset(df, (!is.na(df[,5]))& (!is.na(df[,21])))
+
+
+#Visualize subset % of missing value per features
+#data_loans_cols = data_loans_missing_subset.isnull().sum() * 100 / len(data_loans_missing_subset)
+#data_loans = data_loans_missing_subset
+
+#TRANSFORMING VARIABLES
+
+#Transform to numertic the interest rate
+data_loans['int_rate'] = (data_loans['int_rate'].str.strip('%').astype(float))
+type(data_loans['int_rate'])
+
+# Transforming term
+data_loans["term"] = data_loans["term"].str[:3]
+
+saved_cols = data_loans.columns
+data_loans_matrix = data_loans.as_matrix()
+data_loans.head(10)
+
+from scipy.stats.mstats import winsorize
+winsorize(data_loans['annual_inc'], limits=(0.05, 0.05))
+winsorize(data_loans['dti'], limits=(0.05, 0.05))
+winsorize(data_loans['installment'], limits=(0.05, 0.05))
+winsorize(data_loans['int_rate'], limits=(0.05, 0.05))
+winsorize(data_loans['loan_amnt'], limits=(0.05, 0.05))
+winsorize(data_loans['open_acc'], limits=(0.05, 0.05))
+winsorize(data_loans['total_acc'], limits=(0.05, 0.05))
+
+data_loans = pd.DataFrame(data_loans_matrix, columns=saved_cols)
+
+#Recoding Categorical Variables
+
+#recode_vals = {"grade":               {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7},
+#               "application_type":    {"Individual": 1, "Joint App": 2 },
+#              "loan_status":         {"Fully Paid": 0, "Charged Off": 1},
+#               "emp_length":          {"1 year" : 1, "0+ years" : 2, "2 years" : 3, "3 years" : 4, 
+#                                       "4 years" : 5, "5 years" : 6, "7 years" : 7,
+#                                       "8 years" : 8, "9 years" : 9, "< 1 year" : 10},
+#               "purpose":             {"car" : 1, "credit_card" : 2, "debt_consolidation" : 3, "educational" : 4, 
+#                                       "home_improvement" : 5, "house" : 6, "major_purchase" : 7, 
+#                                       "medical" : 8, "moving" : 9, "other" : 10, "renewable_energy" : 11, 
+#                                       "small_business" : 12, "vacation" : 13, "wedding" : 14},
+#               "home_ownership":      {"ANY" : 1, "MORTGAGE" : 2, "NONE" : 3,
+#                                       "OTHER" : 4, "OWN" : 5, "RENT" : 6},
+#               "verification_status": {"Not Verified Source" : 1, "Source Verified" : 2, "Verified" : 3},
+#               "term":                {36 : 1, 60 : 2},
+#               "sub_grade":           {"A1" : 1, "A2" : 2, "A3" : 3, "A4" : 4, "A5" : 5, 
+#                                       "B1" : 6, "B2" : 7, "B3" : 8, "B4" : 9, "B5" : 10, 
+#                                       "C1" : 11, "C2" : 12, "C3" : 13, "C4" : 14, "C5" : 15, 
+#                                       "D1" : 16, "D2" : 17, "D3" : 18, "D4" : 19, "D5" : 20, 
+#                                       "E1" : 21, "E2" : 22, "E3" : 23, "E4" : 24,"E5" : 25, 
+#                                       "F1" : 26, "F2" : 27, "F3" : 28, "F4" : 29, "F5" : 30, 
+#                                       "G1" : 31, "G2" : 32, "G3" : 33, "G4" : 34, "G5" : 35}
+#
+#              }
+               
+#data_loans.replace(recode_vals, inplace=True)
+data_loans.head(10)
+
+from numpy import array
+from numpy import argmax
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import OneHotEncoder
+# define example
+
+#cat_columns = ['term', 'application_type', 'verification_status', 'emp_length', 'purpose', 'home_ownership']
+data_loans_ohe = pd.get_dummies(data=data_loans, columns=['term', 'application_type', 'verification_status', 'emp_length', 'purpose', 'home_ownership'])
+data_loans = pd.concat([data_loans, data_loans_ohe], axis=1)
+data_loans.head(10)
+
+
+
+
+
